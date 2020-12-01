@@ -8,6 +8,10 @@
     <Compile Include="expanded_to_anf_tests.fs" />
     <Compile Include="il_compiler_tests.fs" />
     <Compile Include="tokenizer_tests.fs" />
+    <Compile Include="make_ast_tests.fs" />
+    <Compile Include="macroexpand_tests.fs" />
+    <Compile Include="lambda_lifting_tests.fs" />
+    <Compile Include="toplevel_tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

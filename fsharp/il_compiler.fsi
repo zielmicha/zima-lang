@@ -20,8 +20,9 @@ type CompilationRequest = {
    body: (AVarName list * ANode)
    argType : ClrType
    returnType : ClrType
-   emitMethod : (string -> ILGenerator * MethodInfo)
+   emitHelperMethod : (string * Type * list<Type>) -> (ILGenerator * MethodInfo)
+   mainMethod : (ILGenerator * MethodInfo)
    findSigByGlobalId : (GlobalId * GlobalId -> FunctionClrSig)
 }
 
-val compile : CompilationRequest -> MethodInfo
+val compile : CompilationRequest -> unit

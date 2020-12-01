@@ -14,7 +14,7 @@ type RObject =
 type DynObject(rType: int64, fieldNames : int64 array, fieldValues : obj array) =
     override this.ToString() =
         let a = Array.zip fieldNames fieldValues |> Array.toList |> List.map (fun (name, value) -> sprintf "%s=%s" (name.ToString()) (value.ToString()))
-        sprintf "{%s}" (String.concat ", " a)
+        sprintf "%d{%s}" rType (String.concat ", " a)
 
     interface RObject with
         member this.FieldNames = fieldNames
@@ -59,3 +59,10 @@ type DynObject(rType: int64, fieldNames : int64 array, fieldValues : obj array) 
 type Util() =
     static member RaiseUnexpectedVariant() =
         failwith "unexpected variant"
+
+type Context() =
+    static member currentContext = new System.Threading.ThreadLocal<RObject>()
+
+    static member Get() = Context.currentContext.Value
+
+    static member Set(v: RObject) = Context.currentContext.Value <- v

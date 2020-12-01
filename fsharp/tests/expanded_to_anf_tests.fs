@@ -11,7 +11,7 @@ open Roboot.Common
 let f =
  expectTest (
     fun () ->
-        let env = Map.ofList [{LocalId.name="foo"}, AVarName (newUniqId ())]
+        let env = { vars = Map.ofList [{LocalId.name="foo"}, AVarName (newUniqId ())]; loops = Map.empty }
         let a1 = expandedToANF env (Atomic (IntLiteral 5L))
 
         printf "%A\n" a1

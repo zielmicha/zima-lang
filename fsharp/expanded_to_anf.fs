@@ -4,39 +4,12 @@ open Roboot.Common
 open Roboot.ExpandedAST
 open Roboot.ANF
 
-type Env = Map<LocalId, AVarName>
+type Env = {
+    vars: Map<LocalId, AVarName>
+    loops: Map<LocalId, AJoinName>
+}
 
-// this is quadratic, we would ideally use (ANode -> ANode) thunks
-let insertJumpAtEnd joinId (node : ANode) =
-    match node with
-    | Let (varName, value, body) -> Let (varName, value, insertJumpAtEnd joinId body)
-    | PatternMatch (value, patternShape, ifMatch, ifFails) ->
-        PatternMatch (value, patternShape, insertJumpAtEnd joinId ifMatch, insertJumpAtEnd joinId ifFails)
-    | Return varName ->
-        JumpToJoin(joinId, [varName])
-    | JumpToJoin(joinName, vars) ->
-        // all join bodies that don't end with jump are transformed to jump to joinId
-        JumpToJoin(joinName, vars)
-    | LetJoin({ name = name; args = args; jumpBody = jumpBody; body = body }) ->
-        LetJoin({ name = name; args = args; jumpBody = insertJumpAtEnd joinId jumpBody; body = insertJumpAtEnd joinId body })
-
-let makeLet (result : ANode) (var : AVarName) (value : ANode) : ANode =
-    let joinId = AJoinName (newUniqId ())
-    LetJoin({
-        name = joinId;
-        args = [ var ];
-        jumpBody = result;
-        body = insertJumpAtEnd joinId value })
-
-let withAllocVar (f : ((ANode -> AVarName) -> ANode)) =
-    let mutable vars = []
-    let allocVar value =
-        let name = AVarName (newUniqId ())
-        vars <- (name, value) :: vars
-        name
-
-    let result = f allocVar
-    List.fold (fun accum (var, value) -> makeLet accum var value) result vars
+let addVar k v env = { env with vars = env.vars |> Map.add k v }
 
 let atomicToANF env (x : AtomicExpr<ExpandedAST>) : ANode =
     withAllocVar (fun allocVar ->
@@ -46,7 +19,7 @@ let atomicToANF env (x : AtomicExpr<ExpandedAST>) : ANode =
 let patternToANF env (jumpIfFail : AJoinName) (body : Env -> ANode) (pattern : MatchPattern) (value : AVarName) =
     match pattern with
     | MatchPattern.Var localId ->
-        let newEnv = (env |> Map.add localId value) in body newEnv
+        let newEnv = (env |> addVar localId value) in body newEnv
     | MatchPattern.Record (typeId, attrs) ->
         let vars = attrs |> List.map (fun (key, _) -> (key, AVarName (newUniqId ())))
         let aux ((_, varName), (_, subpattern)) nextBody = fun env ->
@@ -55,7 +28,7 @@ let patternToANF env (jumpIfFail : AJoinName) (body : Env -> ANode) (pattern : M
         let patternShape = APatternShape.Record (typeId, vars)
         PatternMatch(value, patternShape, allSubpatterns, (JumpToJoin(jumpIfFail, [])))
     | MatchPattern.MatchMap (varName, mapExpr, subpattern) ->
-        let newEnv = (env |> Map.add varName value)
+        let newEnv = (env |> addVar varName value)
         withAllocVar (fun allocVar ->
             let newValue = allocVar (expandedToANF newEnv mapExpr)
             patternToANF env jumpIfFail body subpattern newValue)
@@ -65,10 +38,10 @@ let expandedToANF env (x : ExpandedAST) =
     | ExpandedAST.Atomic a -> atomicToANF env a
     | ExpandedAST.Lambda (arg, body) ->
         let name = AVarName (newUniqId ())
-        let body = expandedToANF (env |> Map.add arg name) body
+        let body = expandedToANF (env |> addVar arg name) body
         returnExpr (Lambda(name, body))
     | ExpandedAST.LocalId id ->
-        (match Map.tryFind id env with
+        (match Map.tryFind id env.vars with
         | None -> failwithf "no var named %s" (id.name)
         | Some var -> Return var)
     | ExpandedAST.Match (value, cases) ->
@@ -84,3 +57,13 @@ let expandedToANF env (x : ExpandedAST) =
                 }
 
             List.foldBack aux cases (returnExpr (Atomic RaiseUnexpectedVariant)))
+    | ExpandedAST.Loop (name, body) ->
+        let startOfLoop = AJoinName (newUniqId ())
+        let env = { env with loops = env.loops |> Map.add name startOfLoop }
+        LetJoin {
+            name = startOfLoop;
+            args = [];
+            jumpBody = expandedToANF env body;
+            body = JumpToJoin (startOfLoop, []) }
+    | ExpandedAST.LoopContinue name ->
+        JumpToJoin ((env.loops |> Map.find name), [])

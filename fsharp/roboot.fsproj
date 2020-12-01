@@ -9,6 +9,7 @@
     <Compile Include="RRuntime.fs" />
     <Compile Include="common.fs" />
     <Compile Include="ast.fs" />
+    <Compile Include="context_util.fs" />
     <Compile Include="expanded_ast.fs" />
     <Compile Include="anf.fs" />
     <Compile Include="expanded_to_anf.fs" />
@@ -19,12 +20,25 @@
     <Compile Include="il_compiler.fs" />
     <Compile Include="tokenizer.fs" />
     <Compile Include="make_ast.fs" />
+    <Compile Include="universe.fs" />
+    <Compile Include="builtins.fs" />
+    <Compile Include="macroexpand.fs" />
+    <Compile Include="lambda_lifting.fs" />
+    <Compile Include="toplevel.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
-  <ItemGroup>
-    <RuntimeHostConfigurationOption Include="System.Globalization.Invariant" Value="true" />
-  </ItemGroup>
+  <PropertyGroup>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />

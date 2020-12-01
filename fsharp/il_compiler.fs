@@ -20,7 +20,8 @@ type CompilationRequest = {
     body: (AVarName list * ANode)
     argType : ClrType
     returnType : ClrType
-    emitMethod : (string -> ILGenerator * MethodInfo)
+    emitHelperMethod : (string * Type * list<Type>) -> (ILGenerator * MethodInfo)
+    mainMethod : (ILGenerator * MethodInfo)
     findSigByGlobalId : (GlobalId * GlobalId -> FunctionClrSig)
 }
 
@@ -38,7 +39,7 @@ type Env = {
     vars : Map<AVarName, ClrVar>
     labels : Map<AJoinName, ClrJoin>
     ilGenerator : ILGenerator
-    emitMethod : (string -> ILGenerator * MethodInfo)
+    emitHelperMethod : (string * Type * list<Type>) -> (ILGenerator * MethodInfo)
     findSigByGlobalId : (GlobalId * GlobalId -> FunctionClrSig)
 }
 
@@ -198,13 +199,15 @@ let compileExpr env (expr : AExpr) =
         compileAtomicExpr env expr
     | Lambda (_, _) -> failwith "il_compiler encountered unlifted lambda"
     | LiftedLambda (context, contextArg, arg, body) ->
-        let req = { CompilationRequest.body = ([contextArg; arg], body);
-                    argType = AnyObject; returnType = AnyObject;
-                    emitMethod = env.emitMethod;
+        let (ilGenerator, methodInfo) = env.emitHelperMethod("closure", typeof<obj>, [typeof<obj>; typeof<obj>])
+        let req = { CompilationRequest.body = ([contextArg; arg], body)
+                    argType = AnyObject; returnType = AnyObject
+                    emitHelperMethod = env.emitHelperMethod
+                    mainMethod = (ilGenerator, methodInfo)
                     findSigByGlobalId = env.findSigByGlobalId }
-        let (lambdaMethod : MethodInfo) = compileWithName "lambda" req
+        compile req
         loadVar env context
-        env.ilGenerator.Emit(OpCodes.Ldftn, lambdaMethod)
+        env.ilGenerator.Emit(OpCodes.Ldftn, methodInfo)
         env.ilGenerator.Emit(OpCodes.Newobj, typeof<System.Func<obj, obj>>)
         AnyObject
 
@@ -318,16 +321,16 @@ let compileNode env (body : ANode) =
         loadVarConverted env varName AnyObject
         env.ilGenerator.Emit(OpCodes.Ret)
 
-let compileWithName name { CompilationRequest.body = (args, body);
-                            argType = argType;
-                            returnType = returnType;
-                            emitMethod = emitMethod;
-                            findSigByGlobalId = findSigByGlobalId } =
-    let (ilGenerator, methodInfo) = emitMethod name
+let compile  { CompilationRequest.body = (args, body)
+               argType = argType
+               returnType = returnType
+               mainMethod = (ilGenerator, _)
+               emitHelperMethod = emitHelperMethod
+               findSigByGlobalId = findSigByGlobalId } =
     let env = { Env.vars = Map.empty;
                 labels = Map.empty;
                 ilGenerator = ilGenerator;
-                emitMethod = emitMethod;
+                emitHelperMethod = emitHelperMethod;
                 findSigByGlobalId = findSigByGlobalId }
 
     let loadArg env (i, argName) =
@@ -338,6 +341,3 @@ let compileWithName name { CompilationRequest.body = (args, body);
 
     let env = List.fold loadArg env (List.indexed args)
     compileNode env body
-    methodInfo
-
-let compile req = compileWithName "main" req

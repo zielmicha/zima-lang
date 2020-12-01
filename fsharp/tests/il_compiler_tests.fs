@@ -14,21 +14,22 @@ open System.Reflection
 type ObjFunc = delegate of obj -> obj
 
 let compileAndRun (argName : AVarName) (body : ANode) value =
-    let emitMethod name =
-        let m = new DynamicMethod(name, typeof<obj>, [| typeof<obj> |])
-        m.DefineParameter(1, ParameterAttributes.In, "arg") |> ignore
+    let emitMethod (name, returnType, argTypes) =
+        let m = new DynamicMethod(name, returnType, argTypes |> Array.ofList)
         (m.GetILGenerator(), m :> MethodInfo)
 
+    let (ilGenerator, mainMethodInfo) = emitMethod ("main", typeof<obj>, [typeof<obj>])
     let req = {
         CompilationRequest.body = ([argName], body);
         argType = AnyObject;
         returnType = AnyObject;
-        emitMethod = emitMethod;
+        emitHelperMethod = emitMethod;
+        mainMethod = (ilGenerator, mainMethodInfo)
         findSigByGlobalId = fun s -> failwith "unexpected findSigByGlobalId"
     }
 
-    let m = Roboot.ILCompiler.compile req
-    let d : ObjFunc = downcast m.CreateDelegate(typeof<ObjFunc>)
+    Roboot.ILCompiler.compile req
+    let d : ObjFunc = downcast mainMethodInfo.CreateDelegate(typeof<ObjFunc>)
     d.Invoke(value)
 
 let f =
@@ -46,7 +47,7 @@ let f =
 
     let (body : ANode) = returnExpr (AExpr.Atomic (MakeRecord ({GlobalId.id=123L}, [Positional 1, argVar; Positional 0, argVar])))
     printf "%A\n" (compileAndRun argVar body ("test" :> obj))
-    T.expect @"{0=test, 1=test}"
+    T.expect @"123{0=test, 1=test}"
 
     let p0 = (AVarName (newUniqId ()))
     let p1 = (AVarName (newUniqId ()))

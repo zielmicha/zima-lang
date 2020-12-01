@@ -71,6 +71,8 @@ type ExpandedAST =
     | Lambda of LocalId * ExpandedAST
     | Match of ExpandedAST * list<MatchCase>
     | LocalId of LocalId
+    | Loop of name:LocalId * body:ExpandedAST
+    | LoopContinue of name:LocalId
 
 type MatchCase = {
     pattern : MatchPattern;
