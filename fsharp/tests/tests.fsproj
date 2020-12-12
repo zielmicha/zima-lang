@@ -12,6 +12,7 @@
     <Compile Include="macroexpand_tests.fs" />
     <Compile Include="lambda_lifting_tests.fs" />
     <Compile Include="toplevel_tests.fs" />
+    <Compile Include="simple_text_program_tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

@@ -1,8 +1,9 @@
 module rec Roboot.AST
+
 open Roboot.Runtime
 open Roboot.Common
 
-type GlobalId = { id : int64 }
+type GlobalId = { id: int64 }
 
 type BodyId = GlobalId * GlobalId
 
@@ -12,33 +13,51 @@ type SymbolKey =
 
 type LocalId = { name: string }
 
-type Composite = {
-    attrs: Map<SymbolKey, AST>
-    nodeId: int64
-}
+type Composite =
+    { attrs: Map<SymbolKey, AST>
+      nodeId: int64 }
 
-type AST = AST of Roboot.Runtime.RObject
+let threadLocalIdToString =
+    let f =
+        new System.Func<GlobalId -> option<string>>(fun () -> (fun id -> None))
+
+    new System.Threading.ThreadLocal<GlobalId -> option<string>>(f)
+
+[<StructuredFormatDisplay("{AsString}")>]
+type AST =
+    | AST of Roboot.Runtime.RObject
+
+    member this.AsString =
+        let idToString = threadLocalIdToString.Value
+
+        sprintf "AST %s" (astToString idToString this)
 
 let genLocalId () =
     let (UniqId n) = newUniqId ()
     { LocalId.name = sprintf "__tmp_%d" n }
 
 // TODO: use negative integers for positional?
-let symbolKeyToInt (k : SymbolKey) =
+let symbolKeyToInt (k: SymbolKey) =
     match k with
     | SymbolKey.Named id -> id.id
-    | SymbolKey.Positional p -> int64(p)
+    | SymbolKey.Positional p -> int64 (p)
 
-let symbolKeyFromInt (key : int64) =
-    if key < 100L then
-        Positional(int(key))
-    else
-        Named { GlobalId.id = key}
+let symbolKeyFromInt (key: int64) =
+    if key < 100L then Positional(int (key)) else Named { GlobalId.id = key }
 
-let dynobj (id : GlobalId) props =
+let dynobj (id: GlobalId) props =
     let props = List.sortBy fst props
-    let fieldNames = props |> List.map (fun (id, _) -> symbolKeyToInt id) |> Array.ofList
-    let fieldValues = props |> List.map (fun (_, v) -> (v :> obj)) |> Array.ofList
+
+    let fieldNames =
+        props
+        |> List.map (fun (id, _) -> symbolKeyToInt id)
+        |> Array.ofList
+
+    let fieldValues =
+        props
+        |> List.map (fun (_, v) -> (v :> obj))
+        |> Array.ofList
+
     Roboot.Runtime.DynObject(id.id, fieldNames, fieldValues)
 
 module Ids =
@@ -48,6 +67,8 @@ module Ids =
     let literal_str = { GlobalId.id = 973200770135020416L }
     let literal_int = { GlobalId.id = 7865579237671921627L }
     let composite = { GlobalId.id = 8782996361887212223L }
+
+    let id_to_string = { GlobalId.id = 6181144078562131523L }
 
     let vec = { GlobalId.id = 6674409882201890986L }
     let attrs = { GlobalId.id = 1379931292032253541L }
@@ -68,97 +89,109 @@ module Ids =
 
 let unknownNodeId = 0L
 
-let hasId (r : RObject) (id : GlobalId) =
-    r.RType = id.id
+let hasId (r: RObject) (id: GlobalId) = r.RType = id.id
 
-let vecToList (r : RObject) =
+let vecToList (r: RObject) =
     // we should probably call vec_to_array defined in the universe
     if hasId r Ids.vec then
-        let a : obj array = downcast r.GetField(0L)
+        let a: obj array = downcast r.GetField(0L)
         Array.toList a
     else
         failwith "value is not a vector"
 
-let tToPair (r : obj) =
-    let r : RObject = downcast r
-    if hasId r Ids.t then
-        (r.GetField(0L), r.GetField(1L))
-    else
-        failwith "value is not a pair"
+let tToPair (r: obj) =
+    let r: RObject = downcast r
+    if hasId r Ids.t then (r.GetField(0L), r.GetField(1L)) else failwith "value is not a pair"
 
-let symbolKey (key : obj) =
-    let key = AST((downcast key) : RObject)
+let symbolKey (key: obj) =
+    let key = AST((downcast key): RObject)
+
     match key with
-        | GlobalId id -> SymbolKey.Named id
-        | Positional id -> SymbolKey.Positional id
-        | _ -> failwith "not a SymbolKey"
+    | GlobalId id -> SymbolKey.Named id
+    | Positional id -> SymbolKey.Positional id
+    | _ -> failwith "not a SymbolKey"
 
 let (|Composite|_|) (AST ast) =
     if hasId ast Ids.composite then
         let nodeId: int64 = downcast ast.GetField(Ids.node_id.id)
         let attrs: RObject = downcast ast.GetField(Ids.attrs.id)
-        let pairToAttr (key : obj, value) = (symbolKeyFromInt (downcast key), AST ((downcast (value : obj)) : RObject))
-        let attrs = vecToList attrs |> List.map tToPair |> List.map pairToAttr |> Map.ofList
-        Some ({ Composite.attrs = attrs; nodeId = nodeId })
+
+        let pairToAttr (key: obj, value) =
+            (symbolKeyFromInt (downcast key), AST((downcast (value: obj)): RObject))
+
+        let attrs =
+            vecToList attrs
+            |> List.map tToPair
+            |> List.map pairToAttr
+            |> Map.ofList
+
+        Some
+            ({ Composite.attrs = attrs
+               nodeId = nodeId })
     else
         None
 
 let makeRPair a b =
-    dynobj Ids.t [Positional 0, a :> obj; Positional 1, b :> obj]
+    dynobj
+        Ids.t
+        [ Positional 0, a :> obj
+          Positional 1, b :> obj ]
 
-let compositeOfList nodeId (l : list<AST>) =
-    { Composite.nodeId = nodeId; attrs = List.indexed l |> List.map (fun (i, v) -> (Positional i, v)) |> Map.ofList }
+let compositeOfList nodeId (l: list<AST>) =
+    { Composite.nodeId = nodeId
+      attrs =
+          List.indexed l
+          |> List.map (fun (i, v) -> (Positional i, v))
+          |> Map.ofList }
 
-let compositeToAst (c : Composite) =
+let compositeToAst (c: Composite) =
     let node_id = 0L
-    let attrs = Map.toList c.attrs |> List.map (fun (key, AST value) -> makeRPair (symbolKeyToInt key :> obj) value) |> List.toArray
-    let attrs = dynobj Ids.vec [Positional 0, attrs]
-    AST (dynobj Ids.composite [Named Ids.attrs, attrs :> obj;
-                               Named Ids.node_id, node_id :> obj])
 
-let localIdToAst (l : LocalId) =
-    AST (dynobj Ids.local_id [Positional 0, l.name])
+    let attrs =
+        Map.toList c.attrs
+        |> List.map (fun (key, (AST value)) -> makeRPair (symbolKeyToInt key :> obj) value)
+        |> List.toArray
 
-let literalStringToAst (s : string) =
-    AST (dynobj Ids.literal_str [Positional 0, s])
+    let attrs = dynobj Ids.vec [ Positional 0, attrs ]
 
-let literalIntToAst (i : int64) =
-    AST (dynobj Ids.literal_int [Positional 0, i :> obj])
+    AST
+        (dynobj
+            Ids.composite
+             [ Named Ids.attrs, attrs :> obj
+               Named Ids.node_id, node_id :> obj ])
 
-let globalIdToAst (s : GlobalId) =
-    AST (dynobj Ids.global_id [Positional 0, s.id :> obj])
+let localIdToAst (l: LocalId) =
+    AST(dynobj Ids.local_id [ Positional 0, l.name ])
+
+let literalStringToAst (s: string) =
+    AST(dynobj Ids.literal_str [ Positional 0, s ])
+
+let literalIntToAst (i: int64) =
+    AST(dynobj Ids.literal_int [ Positional 0, i :> obj ])
+
+let globalIdToAst (s: GlobalId) =
+    AST(dynobj Ids.global_id [ Positional 0, s.id :> obj ])
 
 let (|GlobalId|_|) (AST ast) =
-    if hasId ast Ids.global_id then
-        Some({ GlobalId.id = downcast ast.GetField(0L) })
-    else
-        None
+    if hasId ast Ids.global_id
+    then Some({ GlobalId.id = downcast ast.GetField(0L) })
+    else None
 
 let (|LocalId|_|) (AST ast) =
-    if hasId ast Ids.local_id then
-        Some({ LocalId.name = downcast ast.GetField(0L) })
-    else
-        None
+    if hasId ast Ids.local_id
+    then Some({ LocalId.name = downcast ast.GetField(0L) })
+    else None
 
-let (|LiteralInt|_|) (AST ast) : option<int64> =
-    if hasId ast Ids.literal_int then
-        Some (downcast ast.GetField(0L))
-    else
-        None
+let (|LiteralInt|_|) (AST ast): option<int64> =
+    if hasId ast Ids.literal_int then Some(downcast ast.GetField(0L)) else None
 
-let (|LiteralString|_|) (AST ast) : option<string> =
-    if hasId ast Ids.literal_str then
-        Some (downcast ast.GetField(0L))
-    else
-        None
+let (|LiteralString|_|) (AST ast): option<string> =
+    if hasId ast Ids.literal_str then Some(downcast ast.GetField(0L)) else None
 
-let (|Positional|_|) (AST ast) : option<int> =
-    if hasId ast Ids.positional then
-        Some(downcast ast.GetField(0L))
-    else
-        None
+let (|Positional|_|) (AST ast): option<int> =
+    if hasId ast Ids.positional then Some(downcast ast.GetField(0L)) else None
 
-let globalIdToString idToString (id : GlobalId) =
+let globalIdToString idToString (id: GlobalId) =
     match idToString id with
     | Some s -> s
     | None -> sprintf "id.%d" id.id
@@ -166,60 +199,77 @@ let globalIdToString idToString (id : GlobalId) =
 let extractPositional attrs =
     let rec aux (i, attrs) =
         match Map.tryFind (Positional i) attrs with
-        | Some value ->
-            Some (value, (i + 1, Map.remove (Positional i) attrs))
-        | None ->
-            None
+        | Some value -> Some(value, (i + 1, Map.remove (Positional i) attrs))
+        | None -> None
 
     let ((_, attrs), positionalArgs) = unfoldWithState aux (0, attrs)
     attrs, positionalArgs
 
-let (|OnlyPositional|_|) { Composite.attrs = attrs; nodeId = _ } : option<list<AST>> =
+let (|OnlyPositional|_|) { Composite.attrs = attrs; nodeId = _ }: option<list<AST>> =
     let rest, positional = extractPositional attrs
-    if Map.count rest = 0 then
-        Some positional
-    else
-        None
+    if Map.count rest = 0 then Some positional else None
 
-let symbolKeyToString idToString (k : SymbolKey) =
+let symbolKeyToString idToString (k: SymbolKey) =
     match k with
     | SymbolKey.Named g -> globalIdToString idToString g
     | SymbolKey.Positional i -> sprintf "positional.%d" i
 
-let splitHead (c : Composite) =
+let splitHead (c: Composite) =
     match Map.tryFind (Positional 0) c.attrs with
     | Some head ->
         let aux (k, v) =
             match k with
             | SymbolKey.Positional 0 -> None
-            | SymbolKey.Positional n -> Some (Positional (n-1), v)
-            | SymbolKey.Named i -> Some (Named i, v)
-        let attrs = c.attrs |> Map.toList |> List.choose aux |> Map.ofList
-        Some (head, { Composite.nodeId = c.nodeId; attrs = attrs })
+            | SymbolKey.Positional n -> Some(Positional(n - 1), v)
+            | SymbolKey.Named i -> Some(Named i, v)
+
+        let attrs =
+            c.attrs
+            |> Map.toList
+            |> List.choose aux
+            |> Map.ofList
+
+        Some
+            (head,
+             { Composite.nodeId = c.nodeId
+               attrs = attrs })
     | None -> None
 
-let astToString idToString (ast : AST) =
+let prepend (c: Composite) (v: AST) =
+    let aux (k, v) =
+        match k with
+        | SymbolKey.Positional n -> Some(Positional(n + 1), v)
+        | SymbolKey.Named i -> Some(Named i, v)
+
+    let attrs = c.attrs |> Map.toList |> List.choose aux
+
+    let attrs =
+        ([ Positional 0, v ] @ attrs) |> Map.ofList
+
+    { Composite.nodeId = c.nodeId
+      attrs = attrs }
+
+let astToString idToString (ast: AST) =
     match ast with
     | Composite { attrs = attrs; nodeId = _ } ->
         let (attrs, positional) = extractPositional attrs
+
         let items =
             List.map (astToString idToString) positional
-            @
-            (Map.toList attrs |> List.map (fun (k, v) -> sprintf "%s:%s" (symbolKeyToString idToString k) (astToString idToString v)) )
+            @ (Map.toList attrs
+               |> List.map (fun (k, v) -> sprintf "%s:%s" (symbolKeyToString idToString k) (astToString idToString v)))
 
         sprintf "(%s)" (String.concat " " items)
-    | LocalId name ->
-        sprintf ".%s" name.name
-    | GlobalId id ->
-        globalIdToString idToString id
-    | LiteralInt i ->
-        sprintf "%d" i
-    | LiteralString s ->
-        sprintf "%A" s
-    | _ ->
-        ast.ToString()
+    | LocalId name -> sprintf ".%s" name.name
+    | GlobalId id -> globalIdToString idToString id
+    | LiteralInt i -> sprintf "%d" i
+    | LiteralString s -> sprintf "%A" s
+    | _ -> ast.ToString()
 
 module B =
     let id = globalIdToAst
-    let c l = compositeOfList unknownNodeId l |> compositeToAst
+
+    let c l =
+        compositeOfList unknownNodeId l |> compositeToAst
+
     let l = localIdToAst

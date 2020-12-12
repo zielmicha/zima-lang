@@ -1,0 +1,11 @@
+open std
+
+!!!5670635402122760548
+my
+
+!!!8821604172334482281
+my.main
+(fun ()
+  (match
+    "hello world"
+    (.s (print_lowlevel .s))))

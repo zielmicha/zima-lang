@@ -1,0 +1,32 @@
+open std
+
+!!!8443262434344113238
+std.fun
+!!!7418612383998351871
+std.let
+!!!5145279716794819568
+std.match
+!!!7107475367237975794
+std.clr.call
+
+!!!8698695841387214665
+std.clr.call_virt
+
+!!!6784770118985448820
+std.clr.new
+
+!!!5355370873840340916
+std.ref
+(fun (.v) (clr.new ("Microsoft.FSharp.Core.FSharpRef, FSharp.Core" "System.Object") ("System.Object") (.v)))
+
+!!!5355370873840340916
+std.ref.set
+(fun (.r .v) (clr.call ("Microsoft.FSharp.Core.FSharpRef, FSharp.Core" "System.Object") "set_contents" ("System.Object") "System.Void" (.r .v)))
+
+!!!6590557914122449587
+std.ref.get
+(fun (.r) (clr.call ("Microsoft.FSharp.Core.FSharpRef, FSharp.Core" "System.Object") "get_contents" ("System.Object") "System.Object" (.r)))
+
+!!!8919434547032829906
+std.print_lowlevel
+(fun (.s) (clr.call "System.Console, System.Console" "WriteLine" ("System.String") "System.Void" (.s)))

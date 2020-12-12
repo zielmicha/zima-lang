@@ -19,12 +19,14 @@
     <Compile Include="il_compiler.fsi" />
     <Compile Include="il_compiler.fs" />
     <Compile Include="tokenizer.fs" />
+    <Compile Include="make_ast.fsi" />
     <Compile Include="make_ast.fs" />
     <Compile Include="universe.fs" />
     <Compile Include="builtins.fs" />
     <Compile Include="macroexpand.fs" />
     <Compile Include="lambda_lifting.fs" />
     <Compile Include="toplevel.fs" />
+    <Compile Include="simple_text_program.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
@@ -37,11 +39,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <PublishTrimmed>true</PublishTrimmed>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
     <PackageReference Include="Lokad.ILPack" Version="0.1.6" />
+    <PackageReference Include="System.Reflection.Emit" Version="4.7.0" />
   </ItemGroup>
 </Project>
